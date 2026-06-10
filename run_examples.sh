@@ -11,16 +11,22 @@ OPT="$ROOT/build/bin/accel-opt"
 OUT="$ROOT/build/examples-out"
 mkdir -p "$OUT"
 
-# name | entry-source | driver | expected-substring
+# name | entry-source (.mlir or .acl) | driver | expected-substring
 EXAMPLES=(
   "mac|examples/mac.mlir|examples/driver.c|= 10.0"
   "dot4|examples/dot4.mlir|examples/dot4_driver.c|= 70.0"
   "poly|examples/poly.mlir|examples/poly_driver.c|= 41.0"
+  "quad|examples/quadratic.acl|examples/quadratic_driver.c|= 19.0"
 )
 
 pass=0; fail=0
 for row in "${EXAMPLES[@]}"; do
   IFS='|' read -r name src driver expect <<<"$row"
+  # .acl sources go through the ANTLR front-end first.
+  if [[ "$src" == *.acl ]]; then
+    "$ROOT/.venv/bin/python" "$ROOT/frontend/aclc.py" "$ROOT/$src" -o "$OUT/$name.mlir"
+    src="build/examples-out/$name.mlir"
+  fi
   "$OPT" "$ROOT/$src" --fuse-mac --convert-accel-to-llvm --convert-arith-to-llvm \
       --convert-func-to-llvm --reconcile-unrealized-casts 2>/dev/null \
     | "$LLVM/mlir-translate" --mlir-to-llvmir 2>/dev/null > "$OUT/$name.ll"

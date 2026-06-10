@@ -1,25 +1,31 @@
 # accel-mlir
 
-A small **out-of-tree MLIR dialect** that lowers all the way to native code. It
-exists to demonstrate the full MLIR/LLVM stack end to end:
+A small but **complete compiler** built on MLIR/LLVM: a source language with an
+ANTLR front-end, a custom MLIR dialect with real optimizations in the middle,
+and lowering all the way to native code.
 
-> **generic `arith` IR → raise to a custom dialect → lower to the LLVM dialect → LLVM IR → native binary**
+> **`.acl` source → (ANTLR) → `arith` MLIR → raise to `accel` dialect → optimize → lower to LLVM dialect → LLVM IR → native binary**
 
 The dialect is built around `accel.mac` — fused multiply-accumulate (`a*b + c`),
 the primitive at the heart of every AI accelerator and systolic array.
 
-![demo](demo/demo.gif)
+### The pipeline
+
+![pipeline](demo/pipeline.gif)
+
+### Everything it runs (examples · tests · benchmark)
+
+![run](demo/run.gif)
 
 ## What it exercises
 
-| MLIR concept | Where |
-|---|---|
-| Dialect & op definition in ODS / TableGen | [`include/Accel/*.td`](include/Accel) |
-| Custom assembly format, verifiers, folders | `AccelOps.td`, [`lib/Accel/AccelOps.cpp`](lib/Accel/AccelOps.cpp) |
-| Pattern rewriting / IR transformation (an *optimization*) | [`lib/Conversion/FuseMacPass.cpp`](lib/Conversion/FuseMacPass.cpp) — raises `arith.mulf`+`arith.addf` into `accel.mac` |
-| The dialect-conversion framework (a *lowering*) | [`lib/Conversion/AccelToLLVM.cpp`](lib/Conversion/AccelToLLVM.cpp) — `ConversionTarget`, `TypeConverter`, one-to-many op lowering |
-| An `mlir-opt`-style driver | [`tools/accel-opt`](tools/accel-opt) |
-| Codegen to a runnable binary | [`run_demo.sh`](run_demo.sh) |
+| Compiler stage | Concept | Where |
+|---|---|---|
+| **Front-end** | ANTLR grammar + Python codegen (lexer/parser → AST → IR) | [`frontend/Acl.g4`](frontend/Acl.g4), [`frontend/aclc.py`](frontend/aclc.py) |
+| **Dialect** | Ops/types in ODS/TableGen, custom asm, verifiers, folders, constant materializer | [`include/Accel/*.td`](include/Accel), [`lib/Accel`](lib/Accel) |
+| **Middle-end** | Pattern rewriting (raising), **strength reduction**, folding, CSE/DCE | [`lib/Conversion/FuseMacPass.cpp`](lib/Conversion/FuseMacPass.cpp), [`lib/Accel/AccelOps.cpp`](lib/Accel/AccelOps.cpp), [`OPTIMIZATIONS.md`](OPTIMIZATIONS.md) |
+| **Back-end** | Dialect-conversion to LLVM (`ConversionTarget`, `TypeConverter`, 1→many lowering), codegen | [`lib/Conversion/AccelToLLVM.cpp`](lib/Conversion/AccelToLLVM.cpp), [`run_demo.sh`](run_demo.sh) |
+| **Driver** | An `mlir-opt`-style tool | [`tools/accel-opt`](tools/accel-opt) |
 
 ## Build
 
@@ -33,81 +39,97 @@ cmake -G Ninja -B build \
   -DLLVM_DIR=/usr/lib/llvm-21/lib/cmake/llvm \
   -DCMAKE_C_COMPILER=clang-21 -DCMAKE_CXX_COMPILER=clang++-21
 cmake --build build
+
+# the front-end needs the ANTLR Python runtime:
+python3 -m venv .venv && .venv/bin/pip install -r frontend/requirements.txt
 ```
 
-## Run the end-to-end demo
+## The front-end: Acl
+
+[`Acl.g4`](frontend/Acl.g4) defines a tiny float expression language. The
+ANTLR-generated parser feeds [`aclc.py`](frontend/aclc.py), which walks the tree
+and emits accel-dialect MLIR — the classic *lexer/parser → AST → IR generation*.
 
 ```bash
-./run_demo.sh
+echo 'def quad(x) = 2*x*x + 3*x + 5;' > /tmp/q.acl
+.venv/bin/python frontend/aclc.py /tmp/q.acl        # -> func.func @quad with arith ops
+.venv/bin/python frontend/aclc.py /tmp/q.acl | build/bin/accel-opt --fuse-mac   # raised to accel.mac
 ```
 
-It takes [`examples/mac.mlir`](examples/mac.mlir) (a MAC written with generic
-`arith` ops), runs the two passes, translates to LLVM IR, links it with a tiny
-C driver, and runs it:
+Regenerate the parser from the grammar with `frontend/generate.sh` (needs Java +
+the ANTLR jar; see [`frontend/tools/`](frontend/tools)).
 
+## Optimizations
+
+The middle-end implements several classic optimizations on `accel.mac`; see
+**[OPTIMIZATIONS.md](OPTIMIZATIONS.md)** for the theory and code pointers.
+
+```bash
+build/bin/accel-opt examples/strength.mlir --canonicalize        # strength reduction + folding
+build/bin/accel-opt examples/strength.mlir --canonicalize --cse  # + common-subexpression elimination
 ```
-compute(2, 3, 4) = 10.0 (expected 10.0)
+
+- `mac(x, 1, c) → x + c` — multiply-by-one elimination
+- `mac(x, 2, c) → (x + x) + c` — **strength reduction** (mul → add)
+- `mac(2, 3, 4) → 10` — constant folding + materialization
+- dead constants removed (DCE); duplicate MACs merged (CSE)
+
+## Benchmark
+
+`benchmark.py` runs the pipeline on a degree-8 Horner polynomial
+([`examples/horner8.acl`](examples/horner8.acl)), reports the op-count reduction
+from fusion plus the compiled throughput, and renders a chart:
+
+```bash
+python3 benchmark.py     # writes demo/benchmark.png
 ```
+
+![benchmark](demo/benchmark.png)
 
 ## Examples
 
-Each lives in [`examples/`](examples) and exercises the pipeline differently.
-`./run_examples.sh` compiles all the runnable ones to native binaries and checks
-their results.
+Each lives in [`examples/`](examples). `./run_examples.sh` compiles every runnable
+one (including the `.acl` front-end source) to a native binary and checks the result.
 
 | File | What it shows |
 |---|---|
-| [`mac.mlir`](examples/mac.mlir) | The base case: one MAC, written in `arith`, raised then lowered. |
+| [`mac.mlir`](examples/mac.mlir) | The base case: one MAC in `arith`, raised then lowered. |
 | [`dot4.mlir`](examples/dot4.mlir) | A 4-element dot product → a **chain of 4 `accel.mac`** (a MAC array). |
-| [`poly.mlir`](examples/poly.mlir) | Polynomial eval by Horner's method, written **directly in the dialect**. |
-| [`fold.mlir`](examples/fold.mlir) | The **folders / constant materializer**: `0*x+c → c` and `2*3+4 → 10` under `--canonicalize`. |
+| [`poly.mlir`](examples/poly.mlir) | Horner polynomial written **directly in the dialect**. |
+| [`fold.mlir`](examples/fold.mlir) | The folders + constant materializer under `--canonicalize`. |
+| [`strength.mlir`](examples/strength.mlir) | The **optimization showcase** (strength reduction, folding, CSE). |
+| [`quadratic.acl`](examples/quadratic.acl) | Source compiled by the **ANTLR front-end** end to end. |
+| [`horner8.acl`](examples/horner8.acl) | The benchmark input (degree-8 polynomial → 8 MACs). |
 
 ```bash
 ./run_examples.sh
 # PASS  compute(2, 3, 4) = 10.0 (expected 10.0)
 # PASS  dot4([1,2,3,4], [5,6,7,8]) = 70.0 (expected 70.0)
 # PASS  poly(2) = 41.0 (expected 41.0)
-# === 3 passed, 0 failed ===
-
-build/bin/accel-opt examples/fold.mlir --canonicalize   # watch the ops fold away
-```
-
-## Recording the demo
-
-The GIF above is generated from real command output:
-
-```bash
-python3 demo/make_cast.py        # runs the commands, writes demo/demo.cast
-agg demo/demo.cast demo/demo.gif # render to GIF (asciinema-gif generator)
-```
-
-## The pipeline, stage by stage
-
-```bash
-# 1. raise generic arithmetic into the accelerator primitive
-build/bin/accel-opt examples/mac.mlir --fuse-mac
-#   arith.mulf + arith.addf  =>  accel.mac
-
-# 2. lower the custom dialect (and func) to the LLVM dialect
-build/bin/accel-opt ... --convert-accel-to-llvm --convert-func-to-llvm \
-                        --reconcile-unrealized-casts
-#   accel.mac  =>  llvm.fmul + llvm.fadd
-
-# 3. translate to LLVM IR
-/usr/lib/llvm-21/bin/mlir-translate --mlir-to-llvmir ...
-
-# 4. clang compiles the IR + driver into a native executable
+# PASS  quad(2) = 19.0 (expected 19.0)
+# === 4 passed, 0 failed ===
 ```
 
 ## Tests
 
-`test/*.mlir` are `FileCheck` tests covering parse/print round-tripping, the
-fuse pass, and the lowering:
+`test/*.mlir` are `FileCheck` tests covering round-tripping, the fuse pass, the
+lowering, and the canonicalizer:
 
 ```bash
 ./run_tests.sh
 # PASS  roundtrip.mlir
 # PASS  fuse.mlir
 # PASS  lower.mlir
-# === 3 passed, 0 failed ===
+# PASS  canonicalize.mlir
+# === 4 passed, 0 failed ===
+```
+
+## Recording the demos
+
+The GIFs are generated from real command output:
+
+```bash
+python3 demo/make_cast.py            # runs the commands, writes demo/*.cast
+agg demo/pipeline.cast demo/pipeline.gif
+agg demo/run.cast      demo/run.gif  # (asciinema-gif generator)
 ```

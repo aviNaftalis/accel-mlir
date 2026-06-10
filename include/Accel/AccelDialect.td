@@ -20,6 +20,10 @@ def Accel_Dialect : Dialect {
   }];
   let cppNamespace = "::mlir::accel";
 
+  // The strength-reduction canonicalizer rewrites accel.mac into arith ops,
+  // so arith must be loaded whenever accel is.
+  let dependentDialects = ["::mlir::arith::ArithDialect"];
+
   // Lets folders that produce a constant attribute be rebuilt into an
   // accel.constant op (see AccelDialect::materializeConstant).
   let hasConstantMaterializer = 1;

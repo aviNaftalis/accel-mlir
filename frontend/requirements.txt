@@ -1,0 +1,3 @@
+# Python runtime for the ANTLR-generated parser. Must match the ANTLR tool
+# version used in frontend/generate.sh (antlr-4.13.2-complete.jar).
+antlr4-python3-runtime==4.13.2

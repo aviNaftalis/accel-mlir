@@ -10,6 +10,7 @@ declare -A TESTS=(
   ["roundtrip.mlir"]=""
   ["fuse.mlir"]="--fuse-mac"
   ["lower.mlir"]="--convert-accel-to-llvm"
+  ["canonicalize.mlir"]="--canonicalize"
 )
 
 pass=0; fail=0

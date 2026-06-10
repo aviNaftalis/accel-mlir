@@ -1,5 +1,6 @@
 #include "Accel/AccelDialect.h"
 #include "Accel/AccelOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 
 using namespace mlir;
 using namespace mlir::accel;

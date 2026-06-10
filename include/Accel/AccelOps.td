@@ -44,6 +44,7 @@ def Accel_MacOp : Accel_Op<"mac", [Pure]> {
 
   let assemblyFormat = "$a `,` $b `,` $c attr-dict `:` type($result)";
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 #endif // ACCEL_OPS

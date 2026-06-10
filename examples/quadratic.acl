@@ -1,0 +1,4 @@
+# A quadratic, in the Acl source language.
+# Compiled by the ANTLR front-end (frontend/aclc.py) to accel-dialect MLIR.
+#   q(2) = 2*4 + 3*2 + 5 = 19
+def quad(x) = 2*x*x + 3*x + 5;

@@ -1,8 +1,11 @@
 #include "Accel/AccelOps.h"
 
 #include "Accel/AccelDialect.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include "llvm/ADT/APFloat.h"
 
 using namespace mlir;
@@ -39,4 +42,57 @@ OpFoldResult MacOp::fold(MacOp::FoldAdaptor adaptor) {
   }
 
   return {};
+}
+
+//===----------------------------------------------------------------------===//
+// Canonicalization: algebraic simplification + strength reduction
+//===----------------------------------------------------------------------===//
+
+namespace {
+/// Eliminates the multiply in accel.mac when one factor is a small constant:
+///   mac(a, 1, c) -> a + c          (multiply by one is free)
+///   mac(a, 2, c) -> (a + a) + c    (strength reduction: mul-by-2 -> add)
+/// and the symmetric cases where the constant is the first factor.
+struct StrengthReduceMac : public OpRewritePattern<MacOp> {
+  using OpRewritePattern<MacOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MacOp op,
+                                PatternRewriter &rewriter) const override {
+    Value a = op.getA(), b = op.getB(), c = op.getC();
+
+    auto isConst = [](Value v, double want) {
+      llvm::APFloat f(0.0f);
+      return matchPattern(v, m_ConstantFloat(&f)) && f.isExactlyValue(want);
+    };
+
+    // multiply by one  ->  a single add
+    if (isConst(b, 1.0)) {
+      rewriter.replaceOpWithNewOp<arith::AddFOp>(op, a, c);
+      return success();
+    }
+    if (isConst(a, 1.0)) {
+      rewriter.replaceOpWithNewOp<arith::AddFOp>(op, b, c);
+      return success();
+    }
+
+    // multiply by two  ->  self-add (strength reduction)
+    if (isConst(b, 2.0)) {
+      Value dbl = arith::AddFOp::create(rewriter, op.getLoc(), a, a);
+      rewriter.replaceOpWithNewOp<arith::AddFOp>(op, dbl, c);
+      return success();
+    }
+    if (isConst(a, 2.0)) {
+      Value dbl = arith::AddFOp::create(rewriter, op.getLoc(), b, b);
+      rewriter.replaceOpWithNewOp<arith::AddFOp>(op, dbl, c);
+      return success();
+    }
+
+    return failure();
+  }
+};
+} // namespace
+
+void MacOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                        MLIRContext *context) {
+  results.add<StrengthReduceMac>(context);
 }

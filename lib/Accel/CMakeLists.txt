@@ -11,4 +11,5 @@ add_mlir_dialect_library(MLIRAccel
   LINK_LIBS PUBLIC
   MLIRIR
   MLIRSupport
+  MLIRArithDialect
   )
