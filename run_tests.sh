@@ -11,6 +11,7 @@ declare -A TESTS=(
   ["fuse.mlir"]="--fuse-mac"
   ["lower.mlir"]="--convert-accel-to-llvm"
   ["canonicalize.mlir"]="--canonicalize"
+  ["qmac.mlir"]="--convert-accel-to-llvm"
 )
 
 pass=0; fail=0

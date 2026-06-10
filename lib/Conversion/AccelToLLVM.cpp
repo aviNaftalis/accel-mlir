@@ -70,6 +70,23 @@ struct MacOpLowering : public ConvertOpToLLVMPattern<accel::MacOp> {
   }
 };
 
+/// accel.qmac -> sext i8->i32, mul, add. Integer accumulation is associative,
+/// so (unlike the f32 path) no fast-math is needed for LLVM to vectorize it.
+struct QMacOpLowering : public ConvertOpToLLVMPattern<accel::QMacOp> {
+  using ConvertOpToLLVMPattern<accel::QMacOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(accel::QMacOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type i32 = typeConverter->convertType(op.getType());
+    Value a = LLVM::SExtOp::create(rewriter, op.getLoc(), i32, adaptor.getA());
+    Value b = LLVM::SExtOp::create(rewriter, op.getLoc(), i32, adaptor.getB());
+    Value prod = LLVM::MulOp::create(rewriter, op.getLoc(), a, b);
+    rewriter.replaceOpWithNewOp<LLVM::AddOp>(op, prod, adaptor.getAcc());
+    return success();
+  }
+};
+
 struct AccelToLLVMPass
     : public PassWrapper<AccelToLLVMPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AccelToLLVMPass)
@@ -90,7 +107,8 @@ struct AccelToLLVMPass
     LLVMTypeConverter typeConverter(&getContext());
 
     RewritePatternSet patterns(&getContext());
-    patterns.add<ConstantOpLowering, MacOpLowering>(typeConverter);
+    patterns.add<ConstantOpLowering, MacOpLowering, QMacOpLowering>(
+        typeConverter);
 
     if (failed(applyPartialConversion(getOperation(), target,
                                       std::move(patterns))))

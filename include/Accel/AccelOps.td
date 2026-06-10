@@ -47,4 +47,28 @@ def Accel_MacOp : Accel_Op<"mac", [Pure]> {
   let hasCanonicalizer = 1;
 }
 
+//===----------------------------------------------------------------------===//
+// accel.qmac
+//===----------------------------------------------------------------------===//
+
+def Accel_QMacOp : Accel_Op<"qmac", [Pure]> {
+  let summary = "Quantized multiply-accumulate: i32 acc += (i32)a * (i32)b.";
+  let description = [{
+    The integer MAC primitive of quantized inference: two `int8` operands are
+    multiplied and accumulated into an `int32` (wide accumulation prevents
+    overflow). This is the op an INT8-quantized dot product / matmul is built
+    from.
+
+    ```mlir
+    %acc1 = accel.qmac %a, %b, %acc0 : i8, i8, i32
+    ```
+  }];
+
+  let arguments = (ins I8:$a, I8:$b, I32:$acc);
+  let results = (outs I32:$result);
+
+  let assemblyFormat =
+      "$a `,` $b `,` $acc attr-dict `:` type($a) `,` type($b) `,` type($acc)";
+}
+
 #endif // ACCEL_OPS

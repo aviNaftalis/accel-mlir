@@ -27,6 +27,21 @@ difference being that domain assumption:
 rounding error). Reproduce with `python3 benchmark_dot.py`. Details and the
 honest caveats are in **[OPTIMIZATIONS.md](OPTIMIZATIONS.md)**.
 
+## INT8 quantization (the ML-centric transformation)
+
+A C compiler will never recompute your `f32` program in `int8`. accel-mlir does:
+the [`accel.qmac`](include/Accel/AccelOps.td) op is an `int8 × int8 → int32`
+quantized MAC, and [`examples/qdot.mlir`](examples/qdot.mlir) is an int8 dot
+product. With symmetric per-tensor quantization (`python3 benchmark_quant.py`):
+
+![quantization benchmark](demo/benchmark_quant.png)
+
+**4× smaller data, ~0.001% error on a well-conditioned dot.** On this CPU (no
+AVX-512 VNNI) the int8 *compute* only wins once memory-bound — the unconditional
+win is the 4× memory/model-size cut, and the compute win lands on hardware with
+native int8 MAC arrays (edge NPUs). Scheme, constraints, and honest caveats:
+**[QUANTIZATION.md](QUANTIZATION.md)**.
+
 ### The pipeline
 
 ![pipeline](demo/pipeline.gif)
@@ -119,6 +134,7 @@ one (including the `.acl` front-end source) to a native binary and checks the re
 | [`quadratic.acl`](examples/quadratic.acl) | Source compiled by the **ANTLR front-end** end to end. |
 | [`horner8.acl`](examples/horner8.acl) | Op-count benchmark input (degree-8 polynomial → 8 MACs). |
 | [`dot.mlir`](examples/dot.mlir) | A **reduction loop** (`scf.for` + `memref`) — the vectorized-vs-clang benchmark kernel. |
+| [`qdot.mlir`](examples/qdot.mlir) | An **INT8-quantized** dot (`accel.qmac`) — the quantization benchmark kernel. |
 
 ```bash
 ./run_examples.sh

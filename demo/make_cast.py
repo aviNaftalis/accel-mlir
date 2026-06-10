@@ -52,6 +52,8 @@ REELS = {
         ("python3 benchmark.py", "python3 benchmark.py"),
         ("# the real win: dot product vs clang -O2 (FP reassociation it can't do)", None),
         ("python3 benchmark_dot.py", "python3 benchmark_dot.py"),
+        ("# ML-centric: INT8 quantization -- 4x smaller, bounded accuracy loss", None),
+        ("python3 benchmark_quant.py", "python3 benchmark_quant.py"),
     ],
 }
 
