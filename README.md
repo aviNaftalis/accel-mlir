@@ -8,6 +8,8 @@ exists to demonstrate the full MLIR/LLVM stack end to end:
 The dialect is built around `accel.mac` — fused multiply-accumulate (`a*b + c`),
 the primitive at the heart of every AI accelerator and systolic array.
 
+![demo](demo/demo.gif)
+
 ## What it exercises
 
 | MLIR concept | Where |
@@ -45,6 +47,38 @@ C driver, and runs it:
 
 ```
 compute(2, 3, 4) = 10.0 (expected 10.0)
+```
+
+## Examples
+
+Each lives in [`examples/`](examples) and exercises the pipeline differently.
+`./run_examples.sh` compiles all the runnable ones to native binaries and checks
+their results.
+
+| File | What it shows |
+|---|---|
+| [`mac.mlir`](examples/mac.mlir) | The base case: one MAC, written in `arith`, raised then lowered. |
+| [`dot4.mlir`](examples/dot4.mlir) | A 4-element dot product → a **chain of 4 `accel.mac`** (a MAC array). |
+| [`poly.mlir`](examples/poly.mlir) | Polynomial eval by Horner's method, written **directly in the dialect**. |
+| [`fold.mlir`](examples/fold.mlir) | The **folders / constant materializer**: `0*x+c → c` and `2*3+4 → 10` under `--canonicalize`. |
+
+```bash
+./run_examples.sh
+# PASS  compute(2, 3, 4) = 10.0 (expected 10.0)
+# PASS  dot4([1,2,3,4], [5,6,7,8]) = 70.0 (expected 70.0)
+# PASS  poly(2) = 41.0 (expected 41.0)
+# === 3 passed, 0 failed ===
+
+build/bin/accel-opt examples/fold.mlir --canonicalize   # watch the ops fold away
+```
+
+## Recording the demo
+
+The GIF above is generated from real command output:
+
+```bash
+python3 demo/make_cast.py        # runs the commands, writes demo/demo.cast
+agg demo/demo.cast demo/demo.gif # render to GIF (asciinema-gif generator)
 ```
 
 ## The pipeline, stage by stage

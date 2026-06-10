@@ -15,6 +15,7 @@ cat "$OUT/opt.mlir"
 echo "==> 2. lower: accel + func  ->  llvm dialect"
 "$OPT" "$OUT/opt.mlir" \
   --convert-accel-to-llvm \
+  --convert-arith-to-llvm \
   --convert-func-to-llvm \
   --reconcile-unrealized-casts -o "$OUT/llvm.mlir"
 cat "$OUT/llvm.mlir"

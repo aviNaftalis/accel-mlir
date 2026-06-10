@@ -19,6 +19,10 @@ def Accel_Dialect : Dialect {
     dialect so programs can be compiled to native code.
   }];
   let cppNamespace = "::mlir::accel";
+
+  // Lets folders that produce a constant attribute be rebuilt into an
+  // accel.constant op (see AccelDialect::materializeConstant).
+  let hasConstantMaterializer = 1;
 }
 
 // Base class for all ops in this dialect.
