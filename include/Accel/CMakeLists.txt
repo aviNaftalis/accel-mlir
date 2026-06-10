@@ -1,0 +1,6 @@
+set(LLVM_TARGET_DEFINITIONS AccelOps.td)
+mlir_tablegen(AccelOps.h.inc -gen-op-decls)
+mlir_tablegen(AccelOps.cpp.inc -gen-op-defs)
+mlir_tablegen(AccelDialect.h.inc -gen-dialect-decls -dialect=accel)
+mlir_tablegen(AccelDialect.cpp.inc -gen-dialect-defs -dialect=accel)
+add_public_tablegen_target(AccelOpsIncGen)
