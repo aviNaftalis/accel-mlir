@@ -37,16 +37,35 @@ struct ConstantOpLowering : public ConvertOpToLLVMPattern<accel::ConstantOp> {
   }
 };
 
-/// accel.mac -> llvm.fmul + llvm.fadd  (the one-to-many lowering)
+/// accel.mac -> llvm.fmul + llvm.fadd, both carrying `contract reassoc`.
+///
+/// This is the whole point of the dialect. By *defining* accel.mac as a fused,
+/// reassociatable multiply-accumulate (a domain decision, exactly what ML
+/// frameworks assume), the lowered ops carry fast-math flags a C compiler may
+/// not assume at -O2:
+///   * `contract` lets the backend fuse the mul+add into one hardware FMA
+///     (one rounding instead of two);
+///   * `reassoc` on the add makes an accel.mac accumulation a *recognizable,
+///     reassociatable reduction*, which lets LLVM vectorize it into wide
+///     multi-accumulator FMAs.
+/// (We emit fmul+fadd rather than llvm.fma because the loop vectorizer does not
+/// recognize the opaque fma intrinsic as a reduction.)
 struct MacOpLowering : public ConvertOpToLLVMPattern<accel::MacOp> {
   using ConvertOpToLLVMPattern<accel::MacOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
   matchAndRewrite(accel::MacOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Value product = rewriter.create<LLVM::FMulOp>(op.getLoc(), adaptor.getA(),
-                                                  adaptor.getB());
-    rewriter.replaceOpWithNewOp<LLVM::FAddOp>(op, product, adaptor.getC());
+    auto flags = LLVM::FastmathFlagsAttr::get(
+        rewriter.getContext(),
+        LLVM::FastmathFlags::contract | LLVM::FastmathFlags::reassoc);
+
+    auto mul = LLVM::FMulOp::create(rewriter, op.getLoc(), adaptor.getA(),
+                                    adaptor.getB());
+    mul.setFastmathFlagsAttr(flags);
+    auto add = rewriter.replaceOpWithNewOp<LLVM::FAddOp>(op, mul,
+                                                         adaptor.getC());
+    add.setFastmathFlagsAttr(flags);
     return success();
   }
 };

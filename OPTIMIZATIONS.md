@@ -11,6 +11,46 @@ build/bin/accel-opt examples/strength.mlir --canonicalize
 build/bin/accel-opt examples/strength.mlir --canonicalize --cse
 ```
 
+## 0. The optimization that beats a C compiler (FP reassociation)
+
+The other entries below are *equivalences* — they don't change results, so a
+good C compiler does them too. This one is different, and it's the reason a
+domain compiler exists at all.
+
+A general C compiler at `-O2` must preserve strict IEEE-754 semantics. Floating-
+point addition is **not** associative, so the compiler may **not** reassociate a
+reduction. A dot product therefore stays a single-accumulator, latency-bound
+serial chain, and does **not** auto-vectorize:
+
+```c
+float s = 0;
+for (i) s += a[i]*b[i];     // clang -O2: one scalar FMA every ~4 cycles
+```
+
+accel-mlir *defines* `accel.mac` to be a fused, **reassociatable** multiply-
+accumulate — the exact assumption ML frameworks (PyTorch, XLA) make about
+reductions. So [`AccelToLLVM.cpp`](lib/Conversion/AccelToLLVM.cpp) lowers it to
+`fmul`+`fadd` carrying `contract reassoc` fast-math flags. That single piece of
+**domain knowledge** lets LLVM do what it cannot do for the C loop:
+
+- `reassoc` → the reduction is split across multiple independent accumulators
+  and **vectorized** (here: 8-wide AVX × 4 accumulators);
+- `contract` → each lane fuses to a hardware FMA.
+
+Measured on [`examples/dot.mlir`](examples/dot.mlir) vs the strict-C loop, **both
+compiled `clang -O2 -march=native`** (`benchmark_dot.py`):
+
+![dot benchmark](demo/benchmark_dot.png)
+
+- **~10–29× faster** (compute-bound / L1-resident at the top end).
+- **More accurate**, not less: tree reduction accumulates ~1–2 orders of
+  magnitude less rounding error than the serial sum.
+
+The honest caveat: you *can* hand `clang` `-ffast-math` and it will do the same.
+The point is that a domain compiler bakes the *correct-for-the-domain* semantics
+in **safely and by default**, instead of forcing the programmer to flip a global,
+dangerous flag over their whole program.
+
 ## 1. Constant folding (partial evaluation)
 
 If all inputs to an op are known at compile time, evaluate it then and there.

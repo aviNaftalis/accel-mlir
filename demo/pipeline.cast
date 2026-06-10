@@ -533,5 +533,5 @@
 [19.13, "o", "t"]
 [19.15, "o", "s"]
 [19.3, "o", "\r\n"]
-[19.7, "o", "module {\r\n  llvm.func @compute(%arg0: f32, %arg1: f32, %arg2: f32) -> f32 {\r\n    %0 = llvm.fmul %arg0, %arg1 : f32\r\n    %1 = llvm.fadd %0, %arg2 : f32\r\n    llvm.return %1 : f32\r\n  }\r\n}\r\n\r\n"]
+[19.7, "o", "module {\r\n  llvm.func @compute(%arg0: f32, %arg1: f32, %arg2: f32) -> f32 {\r\n    %0 = llvm.fmul %arg0, %arg1 {fastmathFlags = #llvm.fastmath<contract, reassoc>} : f32\r\n    %1 = llvm.fadd %0, %arg2 {fastmathFlags = #llvm.fastmath<contract, reassoc>} : f32\r\n    llvm.return %1 : f32\r\n  }\r\n}\r\n\r\n"]
 [21.2, "o", "\u001b[1;32m~/accel-mlir\u001b[0m$ "]

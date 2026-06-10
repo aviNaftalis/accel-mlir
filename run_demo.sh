@@ -24,5 +24,5 @@ echo "==> 3. translate: llvm dialect  ->  LLVM IR"
 "$LLVM/mlir-translate" --mlir-to-llvmir "$OUT/llvm.mlir" -o "$OUT/out.ll"
 
 echo "==> 4. compile + link + run"
-"$LLVM/clang" "$OUT/out.ll" "$ROOT/examples/driver.c" -o "$OUT/demo"
+"$LLVM/clang" "$OUT/out.ll" "$ROOT/examples/driver.c" -lm -o "$OUT/demo"
 "$OUT/demo"

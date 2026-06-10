@@ -30,7 +30,7 @@ for row in "${EXAMPLES[@]}"; do
   "$OPT" "$ROOT/$src" --fuse-mac --convert-accel-to-llvm --convert-arith-to-llvm \
       --convert-func-to-llvm --reconcile-unrealized-casts 2>/dev/null \
     | "$LLVM/mlir-translate" --mlir-to-llvmir 2>/dev/null > "$OUT/$name.ll"
-  "$LLVM/clang" "$OUT/$name.ll" "$ROOT/$driver" -o "$OUT/$name" 2>/dev/null
+  "$LLVM/clang" "$OUT/$name.ll" "$ROOT/$driver" -lm -o "$OUT/$name" 2>/dev/null
   result="$("$OUT/$name")"
   if [[ "$result" == *"$expect"* ]]; then
     echo "PASS  $result"; pass=$((pass+1))

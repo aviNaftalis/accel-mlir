@@ -9,6 +9,24 @@ and lowering all the way to native code.
 The dialect is built around `accel.mac` — fused multiply-accumulate (`a*b + c`),
 the primitive at the heart of every AI accelerator and systolic array.
 
+## Why a custom compiler at all? It beats `clang -O2`
+
+A general C compiler must preserve strict IEEE-754 semantics, so it **won't
+reassociate a floating-point reduction** — a dot-product loop stays a serial,
+latency-bound scalar chain. accel-mlir *defines* `accel.mac` to be a
+reassociatable, contractable MAC (the assumption ML frameworks make), so its
+lowered ops carry `contract reassoc` flags and LLVM vectorizes the reduction
+into wide multi-accumulator FMAs.
+
+On a dot product, **both compiled with `clang -O2 -march=native`**, the only
+difference being that domain assumption:
+
+![dot benchmark](demo/benchmark_dot.png)
+
+**~10–29× faster — and *more* accurate** (tree reduction accumulates less
+rounding error). Reproduce with `python3 benchmark_dot.py`. Details and the
+honest caveats are in **[OPTIMIZATIONS.md](OPTIMIZATIONS.md)**.
+
 ### The pipeline
 
 ![pipeline](demo/pipeline.gif)
@@ -99,7 +117,8 @@ one (including the `.acl` front-end source) to a native binary and checks the re
 | [`fold.mlir`](examples/fold.mlir) | The folders + constant materializer under `--canonicalize`. |
 | [`strength.mlir`](examples/strength.mlir) | The **optimization showcase** (strength reduction, folding, CSE). |
 | [`quadratic.acl`](examples/quadratic.acl) | Source compiled by the **ANTLR front-end** end to end. |
-| [`horner8.acl`](examples/horner8.acl) | The benchmark input (degree-8 polynomial → 8 MACs). |
+| [`horner8.acl`](examples/horner8.acl) | Op-count benchmark input (degree-8 polynomial → 8 MACs). |
+| [`dot.mlir`](examples/dot.mlir) | A **reduction loop** (`scf.for` + `memref`) — the vectorized-vs-clang benchmark kernel. |
 
 ```bash
 ./run_examples.sh

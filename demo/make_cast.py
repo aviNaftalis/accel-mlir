@@ -48,8 +48,10 @@ REELS = {
         ("./run_examples.sh", os.path.join(ROOT, "run_examples.sh")),
         ("# run the FileCheck test suite", None),
         ("./run_tests.sh", os.path.join(ROOT, "run_tests.sh")),
-        ("# benchmark: op-count reduction + compiled throughput", None),
+        ("# benchmark: op-count reduction from fusion", None),
         ("python3 benchmark.py", "python3 benchmark.py"),
+        ("# the real win: dot product vs clang -O2 (FP reassociation it can't do)", None),
+        ("python3 benchmark_dot.py", "python3 benchmark_dot.py"),
     ],
 }
 
